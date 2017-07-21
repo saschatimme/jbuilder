@@ -637,6 +637,7 @@ module Executables = struct
     ; link_executables : bool
     ; link_flags       : string list
     ; modes            : Mode.Dict.Set.t
+    ; targets           : Target.Dict.Set.t
     ; buildable        : Buildable.t
     }
 
@@ -651,11 +652,19 @@ module Executables = struct
         else
           Ok modes)
     >>= fun modes ->
+    map_validate (field "targets" Target.Dict.Set.t ~default:Target.Dict.Set.exec_only)
+      ~f:(fun targets ->
+        if Target.Dict.Set.is_empty targets then
+          Error "No compilation target defined."
+        else
+          Ok targets)
+    >>= fun targets ->
     let t =
       { names
       ; link_executables
       ; link_flags
       ; modes
+      ; targets
       ; buildable
       }
     in
