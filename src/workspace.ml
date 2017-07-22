@@ -7,6 +7,7 @@ module Context = struct
       { name   : string
       ; switch : string
       ; root   : string option
+      ; host   : string option
       ; merlin : bool
       }
 
@@ -15,10 +16,12 @@ module Context = struct
         (field   "switch" string                 >>= fun switch ->
          field   "name"   string ~default:switch >>= fun name ->
          field_o "root"   string                 >>= fun root ->
+         field_o "host"   string                 >>= fun host ->
          field_b "merlin"                        >>= fun merlin ->
          return { switch
                 ; name
                 ; root
+                ; host
                 ; merlin
                 })
   end
