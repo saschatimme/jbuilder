@@ -44,9 +44,8 @@ type t =
   ; (** [true] if this context is used for the .merlin files *)
     merlin : bool
 
-  ; (** If this context is a cross-compilation context, you need another context for
-        building tools used for the compilation that run on the host. *)
-    for_host : t option
+  ; (** If this context is a cross-compilation context, we have special building tools used for the compilation that run on the host. *)
+    for_host : string option
 
   ; (** Directory where artifact are stored, for instance "_build/default" *)
     build_dir : Path.t
@@ -129,6 +128,7 @@ val create_for_opam
   -> switch:string
   -> name:string
   -> ?merlin:bool
+  -> ?for_host:string
   -> unit
   -> t Future.t
 

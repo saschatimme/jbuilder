@@ -8,6 +8,7 @@ module Context : sig
       { name   : string
       ; switch : string
       ; root   : string option
+      ; host   : string option
       ; merlin : bool
       }
   end

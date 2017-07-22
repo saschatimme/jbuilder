@@ -33,7 +33,7 @@ type t =
   { name                    : string
   ; kind                    : Kind.t
   ; merlin                  : bool
-  ; for_host                : t option
+  ; for_host                : string option
   ; build_dir               : Path.t
   ; path                    : Path.t list
   ; toplevel_path           : Path.t option
@@ -92,7 +92,7 @@ let sexp_of_t t =
     [ "name", string t.name
     ; "kind", Kind.sexp_of_t t.kind
     ; "merlin", bool t.merlin
-    ; "for_host", option string (Option.map t.for_host ~f:(fun t -> t.name))
+    ; "for_host", option string t.for_host
     ; "build_dir", path t.build_dir
     ; "toplevel_path", option path t.toplevel_path
     ; "ocaml_bin", path t.ocaml_bin
@@ -166,7 +166,7 @@ let extend_env ~vars ~env =
       imported
     |> Array.of_list
 
-let create ~(kind : Kind.t) ~path ~base_env ~env_extra ~name ~merlin ~use_findlib =
+let create ~(kind : Kind.t) ~path ~base_env ~env_extra ~name ~merlin ?for_host ~use_findlib =
   let env = extend_env ~env:base_env ~vars:env_extra in
   let opam_var_cache = Hashtbl.create 128 in
   (match kind with
@@ -178,21 +178,33 @@ let create ~(kind : Kind.t) ~path ~base_env ~env_extra ~name ~merlin ~use_findli
   in
   let which_cache = Hashtbl.create 128 in
   let which x = which ~cache:which_cache ~path x in
+  (* we use ocamlc to find the ocaml toolchain *)
   let ocamlc =
     match which "ocamlc" with
     | None -> prog_not_found_in_path "ocamlc"
     | Some x -> x
   in
   let dir = Path.parent ocamlc in
+  let for_host_dir =
+    match for_host with
+    | None -> dir
+    | Some h -> Path.append (Path.parent dir) (Path.of_string (sprintf "%s-sysroot/bin" h))
+  in
   let prog_not_found prog =
     die "ocamlc found in %s, but %s/%s doesn't exist (context: %s)"
-      (Path.to_string dir) (Path.to_string dir) prog name
+      (Path.to_string dir) (Path.to_string for_host_dir) prog name
   in
-  let best_prog prog = Bin.best_prog dir prog in
+  let best_prog prog = Bin.best_prog for_host_dir prog in
   let get_prog prog =
     match best_prog prog with
     | None -> prog_not_found prog
     | Some fn -> fn
+  in
+  (* we have to update ocamlc in case that we have a special for_host*)
+  let ocamlc =
+    match for_host with
+    | None -> ocamlc
+    | Some _ -> get_prog "ocamlc"
   in
   let build_dir =
     Path.of_string (sprintf "_build/%s" name)
@@ -203,8 +215,13 @@ let create ~(kind : Kind.t) ~path ~base_env ~env_extra ~name ~merlin ~use_findli
       (* If ocamlfind is present, it has precedence over everything else. *)
       match which "ocamlfind" with
       | Some fn ->
+        let args =
+          match for_host with
+          | None -> ["printconf"; "path"]
+          | Some h -> ["-toolchain"; h; "printconf"; "path"]
+        in
         (Future.run_capture_lines ~env Strict
-           (Path.to_string fn) ["printconf"; "path"]
+           (Path.to_string fn) args
          >>| List.map ~f:Path.absolute)
       | None ->
         (* If there no ocamlfind in the PATH, check if we have opam and assume a standard
@@ -223,6 +240,7 @@ let create ~(kind : Kind.t) ~path ~base_env ~env_extra ~name ~merlin ~use_findli
     findlib_path
     (Future.run_capture_lines ~env Strict (Path.to_string ocamlc) ["-config"])
   >>= fun (findlib_path, ocamlc_config) ->
+  (* let _ = print_endline (sprintf "findlib_path %s" findlib_path) in *)
   let ocamlc_config =
     List.map ocamlc_config ~f:(fun line ->
       match String.index line ':' with
@@ -305,7 +323,7 @@ let create ~(kind : Kind.t) ~path ~base_env ~env_extra ~name ~merlin ~use_findli
     { name
     ; kind
     ; merlin
-    ; for_host = None
+    ; for_host
     ; build_dir
     ; path
     ; toplevel_path = Option.map (get_env env "OCAML_TOPLEVEL_PATH") ~f:Path.absolute
@@ -377,9 +395,9 @@ let default ?(merlin=true) ?(use_findlib=true) () =
     | None -> []
   in
   create ~kind:Default ~path ~base_env:env ~env_extra:Env_var_map.empty
-    ~name:"default" ~merlin ~use_findlib
+    ~name:"default" ~merlin ?for_host:None ~use_findlib
 
-let create_for_opam ?root ~switch ~name ?(merlin=false) () =
+let create_for_opam ?root ~switch ~name ?(merlin=false) ?for_host () =
   match Bin.opam with
   | None -> Utils.program_not_found "opam"
   | Some fn ->
@@ -417,7 +435,7 @@ let create_for_opam ?root ~switch ~name ?(merlin=false) () =
     in
     let env = Lazy.force initial_env in
     create ~kind:(Opam { root; switch }) ~path ~base_env:env ~env_extra:vars
-      ~name ~merlin ~use_findlib:true
+      ~name ~merlin ?for_host ~use_findlib:true
 
 let which t s = which ~cache:t.which_cache ~path:t.path s
 
