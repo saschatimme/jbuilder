@@ -49,7 +49,23 @@ let dot_merlin sctx ~dir ({ requires; flags; _ } as t) =
               let bpath = Path.reach path ~from:remaindir in
               ("S " ^ spath) :: ("B " ^ bpath) :: internals, externals
             | Lib.External pkg ->
-              internals, ("PKG " ^ pkg.name) :: externals
+              let context = SC.context sctx in
+              (* If we are in a cross compiler context, Merlin wouldn't find external packages until
+                https://github.com/ocaml/merlin/issues/681 is resolved. Therefore we have to use the
+                findlib_path we obtained during the context creation.*)
+              match context.for_host with
+              | None -> internals, ("PKG " ^ pkg.name) :: externals
+              | Some _ ->
+                let findlib_path = Findlib.path context.findlib in
+                let paths =
+                  List.concat_map
+                  ~f:(fun p ->
+                    let package_path = Path.relative p pkg.name |> Path.to_string in
+                    ["S " ^ package_path; "B " ^ package_path]
+                  )
+                  findlib_path
+                in
+                internals, paths @ externals
           )
         in
         let flags =
