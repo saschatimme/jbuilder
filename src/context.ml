@@ -242,7 +242,6 @@ let create ~(kind : Kind.t) ~path ~base_env ~env_extra ~name ~merlin ?for_host ~
     findlib_path
     (Future.run_capture_lines ~env Strict (Path.to_string ocamlc) ["-config"])
   >>= fun (findlib_path, ocamlc_config) ->
-  (* let _ = print_endline (sprintf "findlib_path %s" findlib_path) in *)
   let ocamlc_config =
     List.map ocamlc_config ~f:(fun line ->
       match String.index line ':' with
