@@ -172,6 +172,7 @@ module Executables : sig
     ; link_executables : bool
     ; link_flags       : string list
     ; modes            : Mode.Dict.Set.t
+    ; targets          : Target.Dict.Set.t
     ; buildable        : Buildable.t
     }
 end
